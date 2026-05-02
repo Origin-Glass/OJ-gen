@@ -1,0 +1,14 @@
+model: unsloth/Qwen3-8B-unsloth-bnb-4bit
+data: data/sft/smoke_50.jsonl
+output: outputs/qwen3-8b-smoke
+max_seq_length: 1024
+epochs: 1
+batch_size: 1
+grad_accum: 4
+learning_rate: 0.0002
+lora_r: 8
+lora_alpha: 16
+lora_dropout: 0.05
+target_modules: qv
+packing: false
+seed: 3407

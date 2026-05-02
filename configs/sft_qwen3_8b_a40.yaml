@@ -1,0 +1,14 @@
+model: unsloth/Qwen3-8B-unsloth-bnb-4bit
+data: data/sft/full.jsonl
+output: outputs/qwen3-8b-ojgen-a40-v1
+max_seq_length: 2048
+epochs: 1
+batch_size: 2
+grad_accum: 8
+learning_rate: 0.0002
+lora_r: 32
+lora_alpha: 64
+lora_dropout: 0.05
+target_modules: all
+packing: true
+seed: 3407

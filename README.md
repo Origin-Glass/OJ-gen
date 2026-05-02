@@ -1,0 +1,209 @@
+# OJGen Training Pipeline
+
+This repository builds a supervised fine-tuning dataset from `data/raw/boj_problems_structured.csv`, fine-tunes a Qwen3-8B LoRA adapter with Unsloth, generates candidate problems, and validates the outputs.
+
+The canonical implementations live under `src/ojgen/`. Legacy top-level entrypoints remain as thin wrappers for compatibility.
+
+## Environment
+
+Use Python 3.10 or 3.11 on Linux with CUDA for training.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -U pip
+python -m pip install -e .
+python -m pip install -r requirements-train.txt
+```
+
+If you want Opik logging:
+
+```bash
+python -m pip install -r requirements-opik.txt
+```
+
+## Data Source
+
+The primary source is:
+
+```text
+data/raw/boj_problems_structured.csv
+```
+
+Legacy `OJ.zip` parsing remains available through `python -m ojgen.parse_zip`, but it is optional and not required for the normal training path.
+
+## 1. Build A Smoke SFT Dataset
+
+```bash
+python -m ojgen.build_sft_from_csv \
+  --csv data/raw/boj_problems_structured.csv \
+  --out data/sft/smoke_50.jsonl \
+  --limit 50 \
+  --inspect
+```
+
+For a very small verification sample:
+
+```bash
+python -m ojgen.build_sft_from_csv \
+  --csv data/raw/boj_problems_structured.csv \
+  --out data/sft/smoke_5.jsonl \
+  --limit 5 \
+  --inspect
+```
+
+If you want to allow missing sample pairs:
+
+```bash
+python -m ojgen.build_sft_from_csv \
+  --csv data/raw/boj_problems_structured.csv \
+  --out data/sft/full.jsonl \
+  --no-require-samples
+```
+
+## 2. Smoke Training
+
+```bash
+python -m ojgen.train_sft \
+  --data data/sft/smoke_50.jsonl \
+  --out outputs/qwen3-8b-smoke \
+  --epochs 1 \
+  --max-seq-length 1024 \
+  --batch-size 1 \
+  --grad-accum 4 \
+  --lora-r 8 \
+  --lora-alpha 16 \
+  --target-modules qv \
+  --no-packing
+```
+
+Single GPU smoke run:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python -m ojgen.train_sft \
+  --data data/sft/smoke_50.jsonl \
+  --out outputs/qwen3-8b-smoke \
+  --epochs 1 \
+  --max-seq-length 1024 \
+  --batch-size 1 \
+  --grad-accum 4 \
+  --lora-r 8 \
+  --lora-alpha 16 \
+  --target-modules qv \
+  --no-packing
+```
+
+## 3. Full A40 Training
+
+Safest recommended mode is single-GPU SFT on one A40 first. This is the most reliable path with current Unsloth workflows.
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python -m ojgen.train_sft \
+  --data data/sft/full.jsonl \
+  --out outputs/qwen3-8b-ojgen-a40-v1 \
+  --model unsloth/Qwen3-8B-unsloth-bnb-4bit \
+  --epochs 1 \
+  --max-seq-length 2048 \
+  --batch-size 2 \
+  --grad-accum 8 \
+  --lora-r 32 \
+  --lora-alpha 64 \
+  --target-modules all \
+  --packing
+```
+
+Optional multi-process launch if your Unsloth, Transformers, Accelerate, and DeepSpeed stack is confirmed compatible in the target environment:
+
+```bash
+accelerate launch --num_processes 2 -m ojgen.train_sft \
+  --data data/sft/full.jsonl \
+  --out outputs/qwen3-8b-ojgen-a40-v1-mgpu \
+  --model unsloth/Qwen3-8B-unsloth-bnb-4bit \
+  --epochs 1 \
+  --max-seq-length 2048 \
+  --batch-size 1 \
+  --grad-accum 8 \
+  --lora-r 32 \
+  --lora-alpha 64 \
+  --target-modules all \
+  --packing
+```
+
+Only use `--deepspeed path/to/config.json` after verifying that the exact package versions are stable together on the cloud machine.
+
+## 4. Generate Candidates
+
+Create prompt JSONL objects like:
+
+```json
+{"difficulty":"Silver 3","tier_value":8,"tags":["bfs","graph"],"time_limit":"2 seconds","memory_limit":"256 MB"}
+```
+
+Then run:
+
+```bash
+python -m ojgen.generate \
+  --adapter outputs/qwen3-8b-ojgen-a40-v1 \
+  --base-model unsloth/Qwen3-8B-unsloth-bnb-4bit \
+  --prompts data/sample/prompts_smoke.jsonl \
+  --out outputs/generated_smoke.jsonl \
+  --max-seq-length 2048 \
+  --max-new-tokens 1024 \
+  --temperature 0.8 \
+  --top-p 0.95 \
+  --num-return-sequences 1
+```
+
+## 5. Validate Outputs
+
+```bash
+python -m ojgen.validators \
+  --input outputs/generated_smoke.jsonl \
+  --out outputs/generated_smoke.validated.jsonl
+```
+
+Optional Opik logging:
+
+```bash
+python opik_eval_loop.py \
+  --generated outputs/generated_smoke.jsonl \
+  --out outputs/generated_smoke.opik.jsonl \
+  --log-opik
+```
+
+## Verification Commands
+
+```bash
+python -m pip install -e .
+```
+
+```bash
+python -m ojgen.build_sft_from_csv \
+  --csv data/raw/boj_problems_structured.csv \
+  --out data/sft/smoke_5.jsonl \
+  --limit 5 \
+  --inspect
+```
+
+```bash
+python - <<'PY'
+from datasets import load_dataset
+ds = load_dataset("json", data_files="data/sft/smoke_5.jsonl", split="train")
+print(ds)
+print(ds[0]["messages"][0])
+PY
+```
+
+```bash
+python -m ojgen.train_sft \
+  --data data/sft/smoke_5.jsonl \
+  --out outputs/test-smoke \
+  --epochs 1 \
+  --max-seq-length 512 \
+  --batch-size 1 \
+  --grad-accum 1 \
+  --lora-r 4 \
+  --lora-alpha 8 \
+  --target-modules qv \
+  --no-packing
+```

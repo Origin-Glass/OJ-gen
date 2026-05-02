@@ -1,0 +1,11 @@
+-r requirements.txt
+unsloth
+datasets
+transformers
+trl
+peft
+accelerate
+bitsandbytes
+sentencepiece
+protobuf
+safetensors
