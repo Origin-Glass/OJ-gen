@@ -62,24 +62,28 @@ def resolve_target_modules(name: str) -> list[str]:
     raise ValueError(f"Unsupported target module preset: {name}")
 
 
-def format_and_truncate_dataset(dataset, tokenizer, max_seq_length: int):
+def format_and_truncate_dataset(dataset, processor, max_seq_length: int):
     def transform_batch(batch):
         texts = []
         token_lengths = []
         for messages in batch["messages"]:
-            rendered = tokenizer.apply_chat_template(
+            # VL 모델의 경우 텍스트 전용인 경우 이미지 인자를 비워둠
+            rendered = processor.apply_chat_template(
                 messages,
                 tokenize=False,
                 add_generation_prompt=False,
             )
-            tokenized = tokenizer(
-                rendered,
+            # 텍스트만 처리
+            tokenized = processor(
+                text=rendered,
+                images=None,
                 truncation=True,
                 max_length=max_seq_length,
                 add_special_tokens=False,
             )
-            token_lengths.append(len(tokenized["input_ids"]))
-            texts.append(tokenizer.decode(tokenized["input_ids"], skip_special_tokens=False))
+            input_ids = tokenized["input_ids"]
+            token_lengths.append(len(input_ids))
+            texts.append(processor.decode(input_ids, skip_special_tokens=False))
         return {"text": texts, "token_length": token_lengths}
 
     return dataset.map(
@@ -106,7 +110,7 @@ def main() -> None:
     if "messages" not in raw_dataset.column_names:
         raise ValueError("Dataset must contain a 'messages' column.")
 
-    model, tokenizer = FastLanguageModel.from_pretrained(
+    model, processor = FastLanguageModel.from_pretrained(
         model_name=args.model,
         max_seq_length=args.max_seq_length,
         dtype=None,
@@ -126,7 +130,7 @@ def main() -> None:
         loftq_config=None,
     )
 
-    train_dataset = format_and_truncate_dataset(raw_dataset, tokenizer, args.max_seq_length)
+    train_dataset = format_and_truncate_dataset(raw_dataset, processor, args.max_seq_length)
     max_seen_length = max(train_dataset["token_length"]) if len(train_dataset) else 0
     use_bf16 = is_bfloat16_supported()
     trainable_parameters = count_trainable_parameters(model)
@@ -142,7 +146,7 @@ def main() -> None:
 
     trainer = SFTTrainer(
         model=model,
-        tokenizer=tokenizer,
+        tokenizer=processor,
         train_dataset=train_dataset,
         dataset_text_field="text",
         max_seq_length=args.max_seq_length,
@@ -171,8 +175,8 @@ def main() -> None:
 
     trainer.train()
     trainer.save_model(str(output_dir))
-    tokenizer.save_pretrained(str(output_dir))
-    print(f"Saved adapter and tokenizer to {output_dir}")
+    processor.save_pretrained(str(output_dir))
+    print(f"Saved adapter and processor to {output_dir}")
 
 
 if __name__ == "__main__":
