@@ -76,6 +76,7 @@ python -m ojgen.train_sft \
   --lora-r 8 \
   --lora-alpha 16 \
   --target-modules qv \
+  --dataset-num-proc 1 \
   --no-packing
 ```
 
@@ -92,6 +93,7 @@ CUDA_VISIBLE_DEVICES=0 python -m ojgen.train_sft \
   --lora-r 8 \
   --lora-alpha 16 \
   --target-modules qv \
+  --dataset-num-proc 1 \
   --no-packing
 ```
 

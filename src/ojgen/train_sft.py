@@ -1,4 +1,5 @@
 import argparse
+import inspect
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +45,7 @@ def parse_args() -> argparse.Namespace:
     parser.set_defaults(packing=True)
     parser.add_argument("--save-steps", type=int, default=100)
     parser.add_argument("--logging-steps", type=int, default=5)
+    parser.add_argument("--dataset-num-proc", type=int, default=1)
     parser.add_argument("--gradient-checkpointing", dest="gradient_checkpointing", action="store_true")
     parser.add_argument("--no-gradient-checkpointing", dest="gradient_checkpointing", action="store_false")
     parser.set_defaults(gradient_checkpointing=True)
@@ -198,14 +200,14 @@ def main() -> None:
         print(f"Trainable parameters: {trainable_parameters}")
     print(f"Output path: {output_dir}")
 
-    trainer = SFTTrainer(
-        model=model,
-        tokenizer=processor,
-        train_dataset=train_dataset,
-        dataset_text_field="text",
-        max_seq_length=args.max_seq_length,
-        packing=args.packing,
-        args=TrainingArguments(
+    trainer_kwargs = {
+        "model": model,
+        "tokenizer": processor,
+        "train_dataset": train_dataset,
+        "dataset_text_field": "text",
+        "max_seq_length": args.max_seq_length,
+        "packing": args.packing,
+        "args": TrainingArguments(
             output_dir=str(output_dir),
             per_device_train_batch_size=args.batch_size,
             gradient_accumulation_steps=args.grad_accum,
@@ -225,7 +227,10 @@ def main() -> None:
             gradient_checkpointing=args.gradient_checkpointing,
             deepspeed=args.deepspeed,
         ),
-    )
+    }
+    if "dataset_num_proc" in inspect.signature(SFTTrainer.__init__).parameters:
+        trainer_kwargs["dataset_num_proc"] = args.dataset_num_proc
+    trainer = SFTTrainer(**trainer_kwargs)
 
     trainer.train()
     trainer.save_model(str(output_dir))
