@@ -4,7 +4,11 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .utils import clean_text, ensure_parent_dir
+from .common import clean_text
+
+
+def ensure_parent_dir(path: str | Path) -> None:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
 
 REQUIRED_SECTION_PATTERNS = [
     r"제목\s*:",

@@ -1,6 +1,6 @@
 # OJGen Training Pipeline
 
-This repository builds a supervised fine-tuning dataset from `data/raw/boj_problems_structured.csv`, fine-tunes a Qwen3-8B LoRA adapter with Unsloth, generates candidate problems, and validates the outputs.
+This repository builds a supervised fine-tuning dataset from `data/raw/boj_problems_structured.csv`, fine-tunes a Qwen LoRA adapter with Unsloth, generates candidate problems, evaluates them, and packages accepted outputs by solved.ac difficulty.
 
 The canonical implementations live under `src/ojgen/`. Legacy top-level entrypoints remain as thin wrappers for compatibility.
 
@@ -62,6 +62,8 @@ python -m ojgen.build_sft_from_csv \
 ```
 
 ## 2. Smoke Training
+
+If training logs show `Observed max tokenized length: 1`, the chat template/tokenizer output is being treated as a nested batch. The training entrypoint now unwraps single-example tokenization results and guarantees that the `text` column passed to `SFTTrainer` is a plain string.
 
 ```bash
 python -m ojgen.train_sft \
@@ -133,7 +135,15 @@ Only use `--deepspeed path/to/config.json` after verifying that the exact packag
 
 ## 4. Generate Candidates
 
-Create prompt JSONL objects like:
+Create balanced solved.ac prompt JSONL objects. This uses only Bronze, Silver, Gold, Platinum, Diamond, and Ruby with tier values 1-30.
+
+```bash
+python generate_prompts.py \
+  --out data/prompts_50k.jsonl \
+  --total 50000
+```
+
+Prompt JSONL objects look like:
 
 ```json
 {"difficulty":"Silver 3","tier_value":8,"tags":["bfs","graph"],"time_limit":"2 seconds","memory_limit":"256 MB"}
@@ -170,6 +180,46 @@ python opik_eval_loop.py \
   --out outputs/generated_smoke.opik.jsonl \
   --log-opik
 ```
+
+## 6. LLM Self-Evaluation And Balanced Markdown Packaging
+
+Run local validation plus LLM self-evaluation. The judge assigns a solved.ac bucket and quality/confidence scores.
+
+```bash
+python -m ojgen.self_eval \
+  --generated outputs/generated_smoke.jsonl \
+  --out outputs/generated_smoke.evaluated.jsonl \
+  --judge-model Qwen/Qwen3.6-35B-A3B \
+  --tensor-parallel-size 1 \
+  --max-model-len 8192
+```
+
+Convert accepted generations back into SFT rows for the next train/evaluate/retrain loop:
+
+```bash
+python -m ojgen.distill_evaluated_to_sft \
+  --evaluated outputs/generated_smoke.evaluated.jsonl \
+  --out data/sft/generated_accepted.jsonl \
+  --min-local-score 0.90 \
+  --min-llm-score 0.85 \
+  --min-confidence 0.75 \
+  --require-llm-eval
+```
+
+Package only accepted rows, with the same count in each difficulty bucket:
+
+```bash
+python -m ojgen.package_md \
+  --evaluated outputs/generated_smoke.evaluated.jsonl \
+  --out-dir final_dataset \
+  --zip oj_problems_balanced.zip \
+  --min-local-score 0.90 \
+  --min-llm-score 0.85 \
+  --min-confidence 0.75 \
+  --require-llm-eval
+```
+
+The notebook [oj_pipeline.ipynb](/Users/choiyunhyuk/programming/OJ-gen/oj_pipeline.ipynb) contains the same commands in execution order.
 
 ## Verification Commands
 

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from tqdm import tqdm
 
+from .difficulty import normalize_difficulty
 from .utils import (
     DEFAULT_SYSTEM_PROMPT,
     FALLBACK_TAGS,
@@ -129,6 +130,7 @@ def build_record(raw_row: dict, columns: list[str], detected: dict[str, str | No
     raw_tier_value = raw_row.get(detected["tier_value"], None) if detected["tier_value"] else None
     tier_value = safe_float(raw_tier_value)
 
+    detected_difficulty = clean_text(raw_row.get(detected["difficulty"], "")) if detected["difficulty"] else ""
     record = {
         "problem_id": clean_text(raw_row.get(detected["problem_id"], "")) if detected["problem_id"] else "",
         "title": title,
@@ -138,15 +140,13 @@ def build_record(raw_row: dict, columns: list[str], detected: dict[str, str | No
         "hint": hint,
         "time_limit": time_limit,
         "memory_limit": memory_limit,
-        "difficulty": clean_text(raw_row.get(detected["difficulty"], "")) if detected["difficulty"] else "",
+        "difficulty": normalize_difficulty(detected_difficulty, tier_value),
         "tier_value": int(tier_value) if tier_value is not None and tier_value.is_integer() else tier_value,
         "tags": parse_tag_list(raw_tags) or list(FALLBACK_TAGS),
         "samples": parse_samples_from_record(raw_row, columns),
     }
     limit_text = clean_text(raw_row.get(detected["limit"], "")) if detected["limit"] else ""
     record["limit"] = coerce_limit_text(limit_text, time_limit, memory_limit)
-    if not record["difficulty"]:
-        record["difficulty"] = "Unknown"
     return record
 
 

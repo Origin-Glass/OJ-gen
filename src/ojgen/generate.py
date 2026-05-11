@@ -7,6 +7,7 @@ from unsloth import FastLanguageModel
 
 from peft import PeftModel
 
+from .difficulty import normalize_difficulty
 from .utils import DEFAULT_SYSTEM_PROMPT, clean_text, ensure_parent_dir
 
 
@@ -25,8 +26,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def build_user_prompt(payload: dict) -> str:
-    difficulty = clean_text(payload.get("difficulty")) or "Unknown"
     tier_value = payload.get("tier_value", None)
+    difficulty = normalize_difficulty(payload.get("difficulty"), tier_value)
     tags = payload.get("tags") or []
     if isinstance(tags, str):
         tags = [tag.strip() for tag in tags.replace(";", ",").split(",") if tag.strip()]

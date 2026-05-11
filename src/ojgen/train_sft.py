@@ -1,5 +1,6 @@
 import argparse
 from pathlib import Path
+from typing import Any
 
 import unsloth
 from unsloth import FastLanguageModel, is_bfloat16_supported
@@ -62,28 +63,76 @@ def resolve_target_modules(name: str) -> list[str]:
     raise ValueError(f"Unsupported target module preset: {name}")
 
 
-def format_and_truncate_dataset(dataset, processor, max_seq_length: int):
+def _normalize_messages(messages: Any) -> list[dict[str, str]]:
+    if not isinstance(messages, list):
+        raise TypeError(f"messages must be a list, got {type(messages).__name__}")
+    normalized = []
+    for index, message in enumerate(messages):
+        if not isinstance(message, dict):
+            raise TypeError(f"messages[{index}] must be a dict, got {type(message).__name__}")
+        role = message.get("role")
+        content = message.get("content")
+        if not isinstance(role, str) or not role:
+            raise TypeError(f"messages[{index}].role must be a non-empty string")
+        if not isinstance(content, str):
+            content = "" if content is None else str(content)
+        normalized.append({"role": role, "content": content})
+    return normalized
+
+
+def _render_chat(tokenizer, messages: list[dict[str, str]]) -> str:
+    rendered = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=False,
+    )
+    if isinstance(rendered, str):
+        return rendered
+    if isinstance(rendered, list) and all(isinstance(part, str) for part in rendered):
+        return "".join(rendered)
+    raise TypeError(f"apply_chat_template must return text when tokenize=False, got {type(rendered).__name__}")
+
+
+def _unwrap_input_ids(input_ids: Any) -> list[int]:
+    if hasattr(input_ids, "tolist"):
+        input_ids = input_ids.tolist()
+    if input_ids and isinstance(input_ids[0], list):
+        if len(input_ids) != 1:
+            raise ValueError(f"Expected one tokenized sequence, got batch size {len(input_ids)}")
+        input_ids = input_ids[0]
+    return list(input_ids or [])
+
+
+def _tokenize_text(tokenizer, text: str, max_seq_length: int) -> list[int]:
+    kwargs = {
+        "truncation": True,
+        "max_length": max_seq_length,
+        "add_special_tokens": False,
+    }
+    try:
+        tokenized = tokenizer(text, **kwargs)
+    except TypeError:
+        tokenized = tokenizer(text=text, images=None, **kwargs)
+    return _unwrap_input_ids(tokenized["input_ids"])
+
+
+def _decode_tokens(tokenizer, input_ids: list[int]) -> str:
+    decoded = tokenizer.decode(input_ids, skip_special_tokens=False)
+    if not isinstance(decoded, str):
+        raise TypeError(f"decode must return str, got {type(decoded).__name__}")
+    return decoded
+
+
+def format_and_truncate_dataset(dataset, tokenizer, max_seq_length: int):
     def transform_batch(batch):
         texts = []
         token_lengths = []
         for messages in batch["messages"]:
-            # VL 모델의 경우 텍스트 전용인 경우 이미지 인자를 비워둠
-            rendered = processor.apply_chat_template(
-                messages,
-                tokenize=False,
-                add_generation_prompt=False,
-            )
-            # 텍스트만 처리
-            tokenized = processor(
-                text=rendered,
-                images=None,
-                truncation=True,
-                max_length=max_seq_length,
-                add_special_tokens=False,
-            )
-            input_ids = tokenized["input_ids"]
+            normalized_messages = _normalize_messages(messages)
+            rendered = _render_chat(tokenizer, normalized_messages)
+            input_ids = _tokenize_text(tokenizer, rendered, max_seq_length)
             token_lengths.append(len(input_ids))
-            texts.append(processor.decode(input_ids, skip_special_tokens=False))
+            texts.append(_decode_tokens(tokenizer, input_ids))
         return {"text": texts, "token_length": token_lengths}
 
     return dataset.map(
@@ -132,6 +181,11 @@ def main() -> None:
 
     train_dataset = format_and_truncate_dataset(raw_dataset, processor, args.max_seq_length)
     max_seen_length = max(train_dataset["token_length"]) if len(train_dataset) else 0
+    if len(train_dataset) and max_seen_length <= 1:
+        raise ValueError(
+            "Tokenized training rows are unexpectedly length <= 1. "
+            "Check that the JSONL messages contain non-empty string content.",
+        )
     use_bf16 = is_bfloat16_supported()
     trainable_parameters = count_trainable_parameters(model)
 

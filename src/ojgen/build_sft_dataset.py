@@ -5,6 +5,7 @@ from collections import defaultdict
 from pathlib import Path
 import pandas as pd
 from .common import clean_text, read_jsonl, tier_to_bucket, write_jsonl
+from .difficulty import normalize_difficulty
 
 SYSTEM_PROMPT = (
     "You are an algorithm problem setter. Generate original Korean programming contest "
@@ -27,9 +28,7 @@ def load_enrichment(path: str | None) -> dict[int, dict]:
         tier_value = None
         if "tier_value" in r and pd.notna(r["tier_value"]):
             tier_value = int(r["tier_value"])
-        bucket = r.get("difficulty", None)
-        if not isinstance(bucket, str) or not bucket:
-            bucket = tier_to_bucket(tier_value)
+        bucket = normalize_difficulty(r.get("difficulty", None), tier_value)
         out[pid] = {"tier_value": tier_value, "difficulty": bucket, "tags": tags or FALLBACK_TAGS}
     return out
 

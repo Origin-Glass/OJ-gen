@@ -3,11 +3,13 @@ import re
 from pathlib import Path
 from typing import Any, Iterable
 
+from .difficulty import SOLVED_AC_BUCKETS, tier_to_bucket
+
 SECTION_KEYS = [
     "description", "input", "output", "limit", "hint", "source"
 ]
 
-DIFFICULTY_BUCKETS = ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Ruby"]
+DIFFICULTY_BUCKETS = SOLVED_AC_BUCKETS
 
 TAG_ALIASES = {
     "dp": "dynamic_programming",
@@ -43,18 +45,3 @@ def write_jsonl(path: str | Path, rows: Iterable[dict]) -> None:
     with open(path, "w", encoding="utf-8") as f:
         for row in rows:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
-
-def tier_to_bucket(tier_value: int | None) -> str:
-    if tier_value is None or tier_value <= 0:
-        return "Unknown"
-    if tier_value <= 5:
-        return "Bronze"
-    if tier_value <= 10:
-        return "Silver"
-    if tier_value <= 15:
-        return "Gold"
-    if tier_value <= 20:
-        return "Platinum"
-    if tier_value <= 25:
-        return "Diamond"
-    return "Ruby"
