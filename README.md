@@ -103,6 +103,26 @@ CUDA_VISIBLE_DEVICES=0 python -m ojgen.train_sft \
 
 Safest recommended mode is single-GPU SFT on one A40 first. This is the most reliable path with current Unsloth workflows.
 
+For `Qwen/Qwen3.6-35B-A3B` on a single A100 80GB, do not use `--target-modules all` with `--lora-r 32`. That attaches LoRA to MoE expert MLP parameters and can create more than 1.8B trainable parameters. Use this safer profile first:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python -m ojgen.train_sft \
+  --data data/sft/full.jsonl \
+  --out outputs/qwen3_6_35b_a3b_v1 \
+  --model Qwen/Qwen3.6-35B-A3B \
+  --epochs 1 \
+  --max-seq-length 4096 \
+  --batch-size 1 \
+  --grad-accum 16 \
+  --lora-r 8 \
+  --lora-alpha 16 \
+  --lora-dropout 0.0 \
+  --target-modules qv \
+  --optim paged_adamw_8bit \
+  --dataset-num-proc 1 \
+  --no-packing
+```
+
 ```bash
 CUDA_VISIBLE_DEVICES=0 python -m ojgen.train_sft \
   --data data/sft/full.jsonl \

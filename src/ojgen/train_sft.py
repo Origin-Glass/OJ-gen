@@ -46,6 +46,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--save-steps", type=int, default=100)
     parser.add_argument("--logging-steps", type=int, default=5)
     parser.add_argument("--dataset-num-proc", type=int, default=1)
+    parser.add_argument("--optim", default="paged_adamw_8bit")
+    parser.add_argument("--max-trainable-params", type=int, default=500_000_000)
+    parser.add_argument("--allow-large-lora", action="store_true")
     parser.add_argument("--gradient-checkpointing", dest="gradient_checkpointing", action="store_true")
     parser.add_argument("--no-gradient-checkpointing", dest="gradient_checkpointing", action="store_false")
     parser.set_defaults(gradient_checkpointing=True)
@@ -203,6 +206,15 @@ def main() -> None:
     print(f"Target modules: {args.target_modules} -> {target_modules}")
     if trainable_parameters is not None:
         print(f"Trainable parameters: {trainable_parameters}")
+        if trainable_parameters > args.max_trainable_params and not args.allow_large_lora:
+            raise ValueError(
+                f"Trainable parameters are too high for the default safety limit "
+                f"({trainable_parameters:,} > {args.max_trainable_params:,}). "
+                "For Qwen MoE models, avoid '--target-modules all' unless you have a larger "
+                "multi-GPU setup. Try '--target-modules qv --lora-r 8 --lora-alpha 16 "
+                "--max-seq-length 4096'. Use --allow-large-lora only if you intentionally "
+                "want to risk the memory cost.",
+            )
     print(f"Output path: {output_dir}")
 
     trainer_kwargs = {
@@ -220,7 +232,7 @@ def main() -> None:
             num_train_epochs=args.epochs,
             warmup_ratio=0.03,
             weight_decay=0.01,
-            optim="adamw_8bit",
+            optim=args.optim,
             logging_steps=args.logging_steps,
             save_steps=args.save_steps,
             save_strategy="steps",
