@@ -11,5 +11,6 @@ CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0} python -m ojgen.train_sft \
   --grad-accum 8 \
   --lora-r 32 \
   --lora-alpha 64 \
+  --lora-dropout 0.0 \
   --target-modules all \
   --packing

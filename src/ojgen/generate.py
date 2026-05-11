@@ -49,7 +49,13 @@ def build_user_prompt(payload: dict) -> str:
 
 
 def load_model(base_model: str, adapter_path: str, max_seq_length: int):
-    model, tokenizer = FastLanguageModel.from_pretrained(
+    adapter_dir = Path(adapter_path)
+    if not (adapter_dir / "adapter_config.json").exists():
+        raise FileNotFoundError(
+            f"LoRA adapter was not found at {adapter_dir}. "
+            "Run training successfully first and check that adapter_config.json exists in the output directory.",
+        )
+    model, processor = FastLanguageModel.from_pretrained(
         model_name=base_model,
         max_seq_length=max_seq_length,
         dtype=None,
@@ -57,6 +63,7 @@ def load_model(base_model: str, adapter_path: str, max_seq_length: int):
     )
     model = PeftModel.from_pretrained(model, adapter_path)
     FastLanguageModel.for_inference(model)
+    tokenizer = getattr(processor, "tokenizer", processor)
     return model, tokenizer
 
 
@@ -81,7 +88,7 @@ def main() -> None:
                 tokenize=False,
                 add_generation_prompt=True,
             )
-            inputs = tokenizer(prompt_text, return_tensors="pt").to(model.device)
+            inputs = tokenizer(text=prompt_text, return_tensors="pt").to(model.device)
             outputs = model.generate(
                 **inputs,
                 max_new_tokens=args.max_new_tokens,

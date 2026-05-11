@@ -15,5 +15,6 @@ python -m ojgen.train_sft \
   --grad-accum 4 \
   --lora-r 8 \
   --lora-alpha 16 \
+  --lora-dropout 0.0 \
   --target-modules qv \
   --no-packing

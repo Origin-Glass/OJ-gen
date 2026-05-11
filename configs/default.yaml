@@ -10,7 +10,7 @@ train:
   weight_decay: 0.01
   lora_r: 16
   lora_alpha: 32
-  lora_dropout: 0.05
+  lora_dropout: 0.0
   seed: 3407
 generation:
   max_new_tokens: 1800

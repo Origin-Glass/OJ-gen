@@ -38,7 +38,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--grad-accum", type=int, default=8)
     parser.add_argument("--lora-r", type=int, default=32)
     parser.add_argument("--lora-alpha", type=int, default=64)
-    parser.add_argument("--lora-dropout", type=float, default=0.05)
+    parser.add_argument("--lora-dropout", type=float, default=0.0)
     parser.add_argument("--target-modules", choices=["all", "attn", "qv"], default="all")
     parser.add_argument("--packing", dest="packing", action="store_true")
     parser.add_argument("--no-packing", dest="packing", action="store_false")
@@ -112,9 +112,9 @@ def _tokenize_text(tokenizer, text: str, max_seq_length: int) -> list[int]:
         "add_special_tokens": False,
     }
     try:
-        tokenized = tokenizer(text, **kwargs)
+        tokenized = tokenizer(text=text, **kwargs)
     except TypeError:
-        tokenized = tokenizer(text=text, images=None, **kwargs)
+        tokenized = tokenizer(text, **kwargs)
     return _unwrap_input_ids(tokenized["input_ids"])
 
 
@@ -123,6 +123,10 @@ def _decode_tokens(tokenizer, input_ids: list[int]) -> str:
     if not isinstance(decoded, str):
         raise TypeError(f"decode must return str, got {type(decoded).__name__}")
     return decoded
+
+
+def get_text_tokenizer(processor):
+    return getattr(processor, "tokenizer", processor)
 
 
 def format_and_truncate_dataset(dataset, tokenizer, max_seq_length: int):
@@ -167,6 +171,7 @@ def main() -> None:
         dtype=None,
         load_in_4bit=True,
     )
+    tokenizer = get_text_tokenizer(processor)
     target_modules = resolve_target_modules(args.target_modules)
     model = FastLanguageModel.get_peft_model(
         model,
@@ -181,7 +186,7 @@ def main() -> None:
         loftq_config=None,
     )
 
-    train_dataset = format_and_truncate_dataset(raw_dataset, processor, args.max_seq_length)
+    train_dataset = format_and_truncate_dataset(raw_dataset, tokenizer, args.max_seq_length)
     max_seen_length = max(train_dataset["token_length"]) if len(train_dataset) else 0
     if len(train_dataset) and max_seen_length <= 1:
         raise ValueError(
@@ -202,7 +207,7 @@ def main() -> None:
 
     trainer_kwargs = {
         "model": model,
-        "tokenizer": processor,
+        "tokenizer": tokenizer,
         "train_dataset": train_dataset,
         "dataset_text_field": "text",
         "max_seq_length": args.max_seq_length,

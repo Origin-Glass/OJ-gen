@@ -75,6 +75,7 @@ python -m ojgen.train_sft \
   --grad-accum 4 \
   --lora-r 8 \
   --lora-alpha 16 \
+  --lora-dropout 0.0 \
   --target-modules qv \
   --dataset-num-proc 1 \
   --no-packing
@@ -92,6 +93,7 @@ CUDA_VISIBLE_DEVICES=0 python -m ojgen.train_sft \
   --grad-accum 4 \
   --lora-r 8 \
   --lora-alpha 16 \
+  --lora-dropout 0.0 \
   --target-modules qv \
   --dataset-num-proc 1 \
   --no-packing
@@ -112,6 +114,7 @@ CUDA_VISIBLE_DEVICES=0 python -m ojgen.train_sft \
   --grad-accum 8 \
   --lora-r 32 \
   --lora-alpha 64 \
+  --lora-dropout 0.0 \
   --target-modules all \
   --packing
 ```
@@ -129,6 +132,7 @@ accelerate launch --num_processes 2 -m ojgen.train_sft \
   --grad-accum 8 \
   --lora-r 32 \
   --lora-alpha 64 \
+  --lora-dropout 0.0 \
   --target-modules all \
   --packing
 ```
