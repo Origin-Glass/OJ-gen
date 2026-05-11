@@ -28,7 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Fine-tune a Qwen3-8B model with Unsloth SFT.")
     parser.add_argument("--data", required=True)
     parser.add_argument("--out", required=True)
-    parser.add_argument("--model", default="unsloth/Qwen3-8B-unsloth-bnb-4bit")
+    parser.add_argument("--model", default="Qwen/Qwen3.6-35B-A3B")
     parser.add_argument("--max-seq-length", type=int, default=2048)
     parser.add_argument("--epochs", type=float, default=1.0)
     parser.add_argument("--lr", type=float, default=2e-4)
