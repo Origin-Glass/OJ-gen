@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import os
 import time
 import urllib.parse
 import urllib.request
@@ -129,7 +130,7 @@ def main():
                 except Exception as e:
                     fail_count += 1
                     print(f"[WARN] {pid}: {e}")
-                    exit()
+                    os._exit(0)
 
     print("done")
     print(f"success: {success_count}")
